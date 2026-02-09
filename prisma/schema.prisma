@@ -1,0 +1,67 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String     @id @default(cuid())
+  name           String?
+  email          String     @unique
+  hashedPassword String
+  companyName    String?
+  industry       String?
+  stage          String?    // "idea", "pre-seed", "seed", "series-a", etc.
+  monthlyBurn    Float?
+  runway         Float?     // in months
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  decisions      Decision[]
+  metrics        Metric[]
+}
+
+model Decision {
+  id             String          @id @default(cuid())
+  title          String
+  context        String?         @db.Text
+  category       String?         // "hiring", "pricing", "fundraising", "product", "operations", "other"
+  status         String          @default("in_progress") // "in_progress", "decided", "tracking", "completed"
+  finalDecision  String?         @db.Text
+  outcome        String?         @db.Text
+  outcomeRating  Int?            // 1-5
+  aiAnalysis     String?         @db.Text
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  decidedAt      DateTime?
+  userId         String
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages       Message[]
+
+  @@index([userId])
+}
+
+model Message {
+  id         String   @id @default(cuid())
+  role       String   // "user", "assistant", "system"
+  content    String   @db.Text
+  createdAt  DateTime @default(now())
+  decisionId String
+  decision   Decision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+
+  @@index([decisionId])
+}
+
+model Metric {
+  id        String   @id @default(cuid())
+  name      String   // "mrr", "burn_rate", "runway", "customers", "churn"
+  value     Float
+  unit      String?  // "$", "months", "%", "count"
+  date      DateTime @default(now())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, name])
+}
