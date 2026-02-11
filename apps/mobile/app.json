@@ -1,0 +1,37 @@
+{
+  "expo": {
+    "name": "CofounderAI",
+    "slug": "cofound-ai",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "cofoundai",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#4c6ef5"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.cofoundai.app",
+      "infoPlist": {
+        "NSSpeechRecognitionUsageDescription": "CofounderAI uses speech recognition to let you dictate decisions.",
+        "NSMicrophoneUsageDescription": "CofounderAI needs microphone access for voice input."
+      }
+    },
+    "android": {
+      "package": "com.cofoundai.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#4c6ef5"
+      },
+      "permissions": ["RECORD_AUDIO"]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "@react-native-voice/voice",
+        { "microphonePermission": "CofounderAI needs microphone access for voice input." }
+      ]
+    ]
+  }
+}
