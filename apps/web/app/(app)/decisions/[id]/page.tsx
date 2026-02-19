@@ -98,13 +98,24 @@ export default function DecisionPage() {
 
       setDecision((prev) => {
         if (!prev) return null;
+        // Remove the temp optimistic message, then add confirmed messages
         const msgs = prev.messages.filter((m) => m.id !== "temp");
         return {
           ...prev,
           messages: [
             ...msgs,
-            { id: Date.now().toString(), role: "user", content: userMsg, createdAt: new Date().toISOString() },
-            { id: data.aiMessage.id, role: "assistant", content: data.aiMessage.content, createdAt: new Date().toISOString() },
+            {
+              id: Date.now().toString(),
+              role: "user",
+              content: userMsg,
+              createdAt: new Date().toISOString(),
+            },
+            {
+              id: data.aiMessage.id,
+              role: "assistant",
+              content: data.aiMessage.content,
+              createdAt: new Date().toISOString(),
+            },
           ],
         };
       });

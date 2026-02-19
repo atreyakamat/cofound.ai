@@ -21,7 +21,7 @@ export function useSpeech(): UseSpeechReturn {
   const [supported, setSupported] = useState(false);
 
   useEffect(() => {
-    Voice.isAvailable().then((available) => setSupported(!!available));
+    Voice.isAvailable().then((available) => setSupported(available === 1));
 
     Voice.onSpeechStart = () => setListening(true);
     Voice.onSpeechEnd = () => setListening(false);
