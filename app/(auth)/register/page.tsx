@@ -19,25 +19,27 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState(1);
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setLoading(true);
+  // Persistent state across steps
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [companyName, setCompanyName] = useState("");
+  const [industry, setIndustry] = useState("");
+  const [stage, setStage] = useState("");
 
-    const formData = new FormData(e.currentTarget);
-    const data = {
-      name: formData.get("name") as string,
-      email: formData.get("email") as string,
-      password: formData.get("password") as string,
-      companyName: formData.get("companyName") as string,
-      industry: formData.get("industry") as string,
-      stage: formData.get("stage") as string,
-    };
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name || !email || !password) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+    setLoading(true);
 
     try {
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ name, email, password, companyName, industry, stage }),
       });
 
       if (!res.ok) {
@@ -45,16 +47,13 @@ export default function RegisterPage() {
         throw new Error(err.error || "Registration failed");
       }
 
-      // Auto sign in
       const result = await signIn("credentials", {
-        email: data.email,
-        password: data.password,
+        email,
+        password,
         redirect: false,
       });
 
-      if (result?.error) {
-        throw new Error(result.error);
-      }
+      if (result?.error) throw new Error(result.error);
 
       toast.success("Welcome to CofounderAI!");
       router.push("/dashboard");
@@ -69,64 +68,102 @@ export default function RegisterPage() {
     <div className="w-full max-w-md px-6">
       <div className="text-center mb-8">
         <span className="text-4xl">🧠</span>
-        <h1 className="mt-4 text-3xl font-bold text-gray-900">
-          Create your account
-        </h1>
-        <p className="mt-2 text-gray-600">
-          Start making better decisions today
-        </p>
+        <h1 className="mt-4 text-3xl font-bold text-gray-900">Create your account</h1>
+        <p className="mt-2 text-gray-600">Start making better decisions today</p>
+        {/* Step indicator */}
+        <div className="mt-4 flex items-center justify-center gap-2">
+          <div className={`h-2 w-8 rounded-full transition-colors ${step >= 1 ? "bg-brand-600" : "bg-gray-200"}`} />
+          <div className={`h-2 w-8 rounded-full transition-colors ${step >= 2 ? "bg-brand-600" : "bg-gray-200"}`} />
+        </div>
       </div>
 
-      <form
-        onSubmit={handleSubmit}
-        className="bg-white rounded-2xl shadow-sm ring-1 ring-gray-200 p-8 space-y-5"
-      >
+      <div className="bg-white rounded-2xl shadow-sm ring-1 ring-gray-200 p-8">
         {step === 1 && (
-          <>
+          <div className="space-y-5">
             <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1.5">
-                Full Name
-              </label>
-              <input id="name" name="name" required className="input-field" placeholder="Jane Doe" />
+              <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1.5">Full Name</label>
+              <input
+                id="name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                className="input-field"
+                placeholder="Jane Doe"
+              />
             </div>
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1.5">
-                Email
-              </label>
-              <input id="email" name="email" type="email" required className="input-field" placeholder="you@startup.com" />
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                className="input-field"
+                placeholder="you@startup.com"
+              />
             </div>
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1.5">
-                Password
-              </label>
-              <input id="password" name="password" type="password" required minLength={6} className="input-field" placeholder="At least 6 characters" />
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1.5">Password</label>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={6}
+                className="input-field"
+                placeholder="At least 6 characters"
+              />
             </div>
-            <button type="button" onClick={() => setStep(2)} className="btn-primary w-full">
+            <button
+              type="button"
+              onClick={() => {
+                if (!name || !email || !password) {
+                  toast.error("Please fill in all fields");
+                  return;
+                }
+                if (password.length < 6) {
+                  toast.error("Password must be at least 6 characters");
+                  return;
+                }
+                setStep(2);
+              }}
+              className="btn-primary w-full"
+            >
               Continue →
             </button>
-          </>
+          </div>
         )}
 
         {step === 2 && (
-          <>
-            <p className="text-sm text-gray-500">Optional — helps CofounderAI give better advice</p>
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <p className="text-sm text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
+              Optional — helps CofounderAI give you more relevant advice
+            </p>
             <div>
-              <label htmlFor="companyName" className="block text-sm font-medium text-gray-700 mb-1.5">
-                Company Name
-              </label>
-              <input id="companyName" name="companyName" className="input-field" placeholder="Acme Inc." />
+              <label htmlFor="companyName" className="block text-sm font-medium text-gray-700 mb-1.5">Company Name</label>
+              <input
+                id="companyName"
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                className="input-field"
+                placeholder="Acme Inc."
+              />
             </div>
             <div>
-              <label htmlFor="industry" className="block text-sm font-medium text-gray-700 mb-1.5">
-                Industry
-              </label>
-              <input id="industry" name="industry" className="input-field" placeholder="SaaS, E-commerce, etc." />
+              <label htmlFor="industry" className="block text-sm font-medium text-gray-700 mb-1.5">Industry</label>
+              <input
+                id="industry"
+                value={industry}
+                onChange={(e) => setIndustry(e.target.value)}
+                className="input-field"
+                placeholder="SaaS, E-commerce, Fintech..."
+              />
             </div>
             <div>
-              <label htmlFor="stage" className="block text-sm font-medium text-gray-700 mb-1.5">
-                Stage
-              </label>
-              <select id="stage" name="stage" className="input-field">
+              <label htmlFor="stage" className="block text-sm font-medium text-gray-700 mb-1.5">Stage</label>
+              <select id="stage" value={stage} onChange={(e) => setStage(e.target.value)} className="input-field">
                 <option value="">Select stage...</option>
                 {stages.map((s) => (
                   <option key={s.value} value={s.value}>{s.label}</option>
@@ -134,23 +171,20 @@ export default function RegisterPage() {
               </select>
             </div>
             <div className="flex gap-3">
-              <button type="button" onClick={() => setStep(1)} className="btn-secondary flex-1">
-                ← Back
-              </button>
+              <button type="button" onClick={() => setStep(1)} className="btn-secondary flex-1">← Back</button>
               <button type="submit" disabled={loading} className="btn-primary flex-1">
-                {loading ? "Creating..." : "Create Account"}
+                {loading ? "Creating account..." : "Create Account"}
               </button>
             </div>
-          </>
+          </form>
         )}
-      </form>
+      </div>
 
       <p className="mt-6 text-center text-sm text-gray-600">
         Already have an account?{" "}
-        <Link href="/login" className="font-semibold text-brand-600 hover:text-brand-500">
-          Sign in
-        </Link>
+        <Link href="/login" className="font-semibold text-brand-600 hover:text-brand-500">Sign in</Link>
       </p>
     </div>
   );
 }
+

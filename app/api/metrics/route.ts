@@ -15,8 +15,9 @@ export async function GET(req: NextRequest) {
   });
 
   // Group by name and get latest
-  const grouped: Record<string, any[]> = {};
-  metrics.forEach((m) => {
+  const grouped: Record<string, typeof metrics[number][]> = {};
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  metrics.forEach((m: any) => {
     if (!grouped[m.name]) grouped[m.name] = [];
     grouped[m.name].push(m);
   });

@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { generateAnalysis, type ChatMessage } from "@/lib/ai";
+import {
+  buildReasoningContext,
+  detectBiases,
+  generateStructuredAnalysis,
+  serializeAnalysis,
+} from "@/lib/decision-engine";
+import type { ChatMessage } from "@/lib/decision-engine";
 
 export async function POST(
   req: NextRequest,
@@ -22,31 +28,55 @@ export async function POST(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const conversationHistory: ChatMessage[] = decision.messages.map((m) => ({
+  const conversationHistory: ChatMessage[] = decision.messages.map((m: { role: string; content: string }) => ({
     role: m.role as "user" | "assistant",
     content: m.content,
   }));
 
-  const analysis = await generateAnalysis(decision.title, conversationHistory);
+  try {
+    // Run context extraction and bias detection in parallel
+    const [context, biases] = await Promise.all([
+      buildReasoningContext(
+        decision.title,
+        decision.category || "other",
+        conversationHistory
+      ),
+      detectBiases(conversationHistory),
+    ]);
 
-  // Save analysis message and update decision
-  await prisma.message.create({
-    data: {
-      role: "assistant",
-      content: analysis,
-      decisionId: decision.id,
-    },
-  });
+    // Generate structured analysis
+    const analysis = await generateStructuredAnalysis(
+      decision.title,
+      decision.category || "other",
+      context,
+      biases,
+      conversationHistory
+    );
 
-  const updated = await prisma.decision.update({
-    where: { id: decision.id },
-    data: {
-      aiAnalysis: analysis,
-      status: "decided",
-      decidedAt: new Date(),
-    },
-    include: { messages: { orderBy: { createdAt: "asc" } } },
-  });
+    const serialized = serializeAnalysis(analysis);
 
-  return NextResponse.json(updated);
+    // Save analysis as a special message and update decision
+    await prisma.message.create({
+      data: {
+        role: "assistant",
+        content: `__ANALYSIS__${serialized}`,
+        decisionId: decision.id,
+      },
+    });
+
+    const updated = await prisma.decision.update({
+      where: { id: decision.id },
+      data: {
+        aiAnalysis: serialized,
+        status: "decided",
+        decidedAt: new Date(),
+      },
+      include: { messages: { orderBy: { createdAt: "asc" } } },
+    });
+
+    return NextResponse.json({ ...updated, analysisData: analysis });
+  } catch (error) {
+    console.error("[POST /analyze]", error);
+    return NextResponse.json({ error: "Analysis generation failed" }, { status: 500 });
+  }
 }

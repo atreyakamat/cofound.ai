@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getAIResponse, type ChatMessage } from "@/lib/ai";
+import { getReasoningResponse, type ChatMessage } from "@/lib/decision-engine";
 
 export async function POST(
   req: NextRequest,
@@ -39,14 +39,18 @@ export async function POST(
   });
 
   // Build conversation history
-  const conversationHistory: ChatMessage[] = decision.messages.map((m) => ({
+  const conversationHistory: ChatMessage[] = decision.messages.map((m: { role: string; content: string }) => ({
     role: m.role as "user" | "assistant",
     content: m.content,
   }));
   conversationHistory.push({ role: "user", content: message });
 
-  // Get AI response
-  const aiResponse = await getAIResponse(conversationHistory);
+  // Get AI response via reasoning engine
+  const aiResponse = await getReasoningResponse(
+    conversationHistory,
+    decision.title,
+    decision.category || "other"
+  );
 
   // Save AI response
   const aiMessage = await prisma.message.create({
