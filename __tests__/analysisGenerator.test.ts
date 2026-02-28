@@ -9,6 +9,13 @@ jest.mock("@/lib/ai-client", () => ({
   supportsJsonMode: jest.fn(() => true),
 }));
 
+jest.mock("@/lib/prompts", () => ({
+  assembleAnalysisPrompt: jest.fn((_t: string, _c: unknown, _m: unknown[], _f: unknown) => [
+    { role: "system", content: "system prompt" },
+    { role: "user", content: "analysis prompt" },
+  ]),
+}));
+
 import {
   generateStructuredAnalysis,
   serializeAnalysis,
@@ -16,6 +23,7 @@ import {
 } from "@/lib/decision-engine/analysisGenerator";
 import type { StructuredAnalysis } from "@/lib/decision-engine/analysisGenerator";
 import { getAIClient } from "@/lib/ai-client";
+import { assembleAnalysisPrompt } from "@/lib/prompts";
 
 const mockCreate = jest.fn();
 beforeEach(() => {
@@ -65,6 +73,7 @@ const SAMPLE_ANALYSIS: StructuredAnalysis = {
     "List 3 investors who could add strategic value beyond capital",
     "Run a 90-day plan to get to a stronger fundraising position",
   ],
+  reflection_question: "If you don't raise, does the business survive on its own merits?",
   detected_biases: [
     {
       bias: "Urgency bias",
@@ -123,10 +132,12 @@ describe("deserializeAnalysis", () => {
 
 describe("generateStructuredAnalysis", () => {
   const context = {
+    primary_goal: "Extend runway and accelerate growth",
     goal: "Extend runway and accelerate growth",
     constraints: ["8 months runway", "team of 5"],
     assumptions: ["Market will remain stable"],
     risks: ["Dilution risk", "Wrong investor fit"],
+    unknowns: ["Actual investor interest"],
     alternatives: ["Bootstrap to profitability", "Revenue-based financing"],
     key_facts: ["Current ARR: $400k", "MoM growth: 12%"],
   };
@@ -192,10 +203,11 @@ describe("generateStructuredAnalysis", () => {
 
     await generateStructuredAnalysis("Test decision", "product", context, [], manyMessages);
 
-    const callArgs = mockCreate.mock.calls[0][0];
-    const userPrompt = callArgs.messages[1].content;
-    // Should contain "Message 9" through "Message 20" (last 12) but not "Message 8"
-    expect(userPrompt).toContain("Message 20");
-    expect(userPrompt).not.toContain("Message 1\n");
+    // Verify the assembler was called with only the last 12 messages
+    const assemblerCalls = (assembleAnalysisPrompt as jest.Mock).mock.calls;
+    const passedMessages = assemblerCalls[assemblerCalls.length - 1][2];
+    expect(passedMessages).toHaveLength(12);
+    expect(passedMessages[0].content).toBe("Message 9");
+    expect(passedMessages[11].content).toBe("Message 20");
   });
 });

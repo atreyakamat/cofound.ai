@@ -11,30 +11,74 @@ export async function GET(req: NextRequest) {
 
   const userId = session.user.id;
 
-  const [totalDecisions, decidedCount, trackingCount, recentDecisions] =
-    await Promise.all([
-      prisma.decision.count({ where: { userId } }),
-      prisma.decision.count({ where: { userId, status: "decided" } }),
-      prisma.decision.count({ where: { userId, status: "tracking" } }),
-      prisma.decision.findMany({
-        where: { userId },
-        orderBy: { createdAt: "desc" },
-        take: 5,
-        include: { _count: { select: { messages: true } } },
-      }),
-    ]);
-
-  const avgRating = await prisma.decision.aggregate({
-    where: { userId, outcomeRating: { not: null } },
-    _avg: { outcomeRating: true },
-  });
-
-  return NextResponse.json({
+  const [
     totalDecisions,
+    questioningCount,
     decidedCount,
     trackingCount,
-    inProgressCount: totalDecisions - decidedCount - trackingCount,
-    avgOutcomeRating: avgRating._avg.outcomeRating,
+    completedCount,
+    recentDecisions,
+    avgRating,
+    user,
+    activeInsights,
+    categoryBreakdown,
+  ] = await Promise.all([
+    prisma.decision.count({ where: { userId } }),
+    prisma.decision.count({ where: { userId, status: "questioning" } }),
+    prisma.decision.count({ where: { userId, status: "decided" } }),
+    prisma.decision.count({ where: { userId, status: "tracking" } }),
+    prisma.decision.count({ where: { userId, status: "completed" } }),
+    prisma.decision.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+      include: { _count: { select: { messages: true } } },
+    }),
+    prisma.decision.aggregate({
+      where: { userId, outcomeRating: { not: null } },
+      _avg: { outcomeRating: true },
+    }),
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        name: true,
+        companyName: true,
+        personalityType: true,
+        riskTolerance: true,
+        onboardingCompleted: true,
+      },
+    }),
+    prisma.founderInsight.count({
+      where: { userId, dismissed: false },
+    }),
+    prisma.decision.groupBy({
+      by: ["category"],
+      where: { userId },
+      _count: true,
+    }),
+  ]);
+
+  return NextResponse.json({
+    user: {
+      name: user?.name,
+      companyName: user?.companyName,
+      personalityType: user?.personalityType,
+      riskTolerance: user?.riskTolerance,
+      onboardingCompleted: user?.onboardingCompleted,
+    },
+    stats: {
+      totalDecisions,
+      questioningCount,
+      decidedCount,
+      trackingCount,
+      completedCount,
+      avgOutcomeRating: avgRating._avg.outcomeRating,
+      activeInsights,
+    },
+    categoryBreakdown: categoryBreakdown.map((c) => ({
+      category: c.category || "other",
+      count: c._count,
+    })),
     recentDecisions,
   });
 }

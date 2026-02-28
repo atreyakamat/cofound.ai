@@ -1,84 +1,64 @@
 import { getAIClient, getModel, supportsJsonMode } from "../ai-client";
+import { assembleQuestionPrompt, type FounderContext } from "../prompts";
 
-// Category-specific question frameworks - the raw thinking scaffolding for the AI
-const QUESTION_FRAMEWORKS: Record<string, string> = {
-  hiring: `You are evaluating a HIRING decision. Your questions must explore:
-1. Runway impact — Does the founder have the runway to support this hire for 12+ months?
-2. Urgency validity — Is this urgent because of real blockers or emotional FOMO?
-3. Role clarity — Is the scope of this role defined, or are they hiring hope?
-4. Failure cost — If this hire fails in 90 days, what damage occurs?
-5. Build vs. contract — Could a contractor or tool solve this without full-time commitment?
-DO NOT ask generic questions. Ask the uncomfortable ones.`,
+// Category-specific question lenses injected alongside the master system prompt
+const QUESTION_LENSES: Record<string, string> = {
+  hiring: `Category lens — HIRING:
+- Runway: 12+ months runway to support this hire?
+- Urgency validity: real blocker vs FOMO?
+- Role clarity: scope defined or hiring hope?
+- Failure cost: blast radius if hire fails in 90 days?
+- Build vs contract: could a contractor solve this cheaper?`,
 
-  pricing: `You are evaluating a PRICING decision. Your questions must explore:
-1. Price anchoring — What is the customer's reference point? What do they compare you to?
-2. Willingness to pay — Has the founder tested real willingness to pay, or only asked?
-3. Positioning signal — What does this price communicate about the product's position?
-4. Revenue concentration — Does this pricing change help or hurt your most important customers?
-5. Reversibility — How easy is it to reverse this pricing change for existing customers?`,
+  pricing: `Category lens — PRICING:
+- Real vs theoretical willingness to pay
+- Customer price reference point
+- Positioning signal the price sends
+- Revenue concentration impact
+- Reversibility for existing customers`,
 
-  fundraising: `You are evaluating a FUNDRAISING decision. Your questions must explore:
-1. Leverage — What is the founder's negotiation position right now? Are they raising from weakness or strength?
-2. Dilution math — At this valuation, what % are they giving up, and what does that mean at exit?
-3. Alternatives — What happens if they don't raise? Is default alive realistic?
-4. Investor quality — What does this investor bring beyond money? References?
-5. Timing — Is this the right market timing, or is urgency driven by fear of running out?`,
+  fundraising: `Category lens — FUNDRAISING:
+- Leverage: raising from strength or desperation?
+- Dilution math at this valuation
+- Default alive: what happens without the raise?
+- Investor quality beyond capital
+- Market timing vs fear-driven urgency`,
 
-  product: `You are evaluating a PRODUCT decision. Your questions must explore:
-1. Problem validation — Is this solving a problem they've proven exists, or one they've assumed exists?
-2. User vs. founder desire — Is this feature wanted by paying users or just by the founder?
-3. Opportunity cost — What are they NOT building if they build this?
-4. Complexity debt — What technical or operational surface area does this add?
-5. Measurability — How will they know in 30 days if this was the right decision?`,
+  product: `Category lens — PRODUCT:
+- Problem validated with paying users or assumed?
+- User desire vs founder desire
+- Opportunity cost of building this
+- Technical/operational surface area added
+- Measurability: how will they know in 30 days?`,
 
-  growth: `You are evaluating a GROWTH decision. Your questions must explore:
-1. Channel fit — Is there evidence this channel works for their specific ICP and price point?
-2. Unit economics — At current conversion rates, what is the payback period for this channel?
-3. Scalability — Does this channel scale, or does it require linear effort?
-4. Dependency risk — What happens if this channel disappears or gets 3x more expensive?
-5. Foundation — Is the product ready for growth, or will growth create churn they can't handle?`,
+  growth: `Category lens — GROWTH:
+- Channel fit evidence for this specific ICP
+- Unit economics payback period
+- Scalability: linear effort or compound?
+- Dependency risk if channel disappears
+- Is the product ready for growth (churn risk)?`,
 
-  operations: `You are evaluating an OPERATIONS decision. Your questions must explore:
-1. Root cause — Is this solving a symptom or a root cause?
-2. Leverage — Does solving this create compounding value, or is it a one-time fix?
-3. Reversibility — Can this be undone if it creates new problems?
-4. Tool vs. process — Is the problem tooling, process, or team behavior?
-5. Opportunity cost — What else could the team be doing with this time?`,
+  operations: `Category lens — OPERATIONS:
+- Root cause vs symptom
+- Does fixing this compound or is it one-time?
+- Reversibility
+- Tool vs process vs team behavior
+- Opportunity cost of the time spent`,
 
-  pivot: `You are evaluating a PIVOT decision. Your questions must explore:
-1. Signal quality — Is the signal driving this pivot a data signal or an emotional signal?
-2. What's being preserved — What validated learning from the current path transfers to the new one?
-3. Team conviction — Does the team believe in the new direction, or is it founder-led alone?
-4. Sunk cost trap — Would this pivot happen if they hadn't spent the last 6 months on version 1?
-5. New risks — What new problems does the pivot create that didn't exist before?`,
+  pivot: `Category lens — PIVOT:
+- Signal quality: data-driven signal or emotional signal?
+- What validated learning carries over?
+- Team conviction vs founder-only belief
+- Sunk cost check: would this pivot happen without prior investment?
+- New risks the pivot creates`,
 
-  other: `You are evaluating a strategic decision. Your questions must explore:
-1. Goal clarity — What does success look like in 90 days if this decision is correct?
-2. Hidden constraints — What constraints exist that they haven't mentioned yet?
-3. Assumptions at risk — What must be true for this decision to work out?
-4. Worst case — What does failure look like, and how survivable is it?
-5. Alternatives — What options are they NOT considering, and why not?`,
+  other: `Category lens — STRATEGIC:
+- Success criteria in 90 days
+- Hidden constraints not yet mentioned
+- Assumptions that must hold for success
+- Worst case survivability
+- Options not being considered and why`,
 };
-
-const BASE_QUESTION_SYSTEM = `You are CofounderAI — a strategic co-founder who asks uncomfortable, specific questions.
-
-Your job is to generate THINKING questions, not information questions.
-
-Rules:
-- Questions must be SPECIFIC to the exact situation described, not generic startup advice
-- Force the founder to confront things they may be avoiding
-- Each question should be answerable in 2-3 sentences  
-- Questions should be sequential: start with the most fundamental, end with the most tactical
-- NO motivational language, NO "great question" - be direct
-
-Return ONLY valid JSON:
-{
-  "opening": "One sentence acknowledging the decision and framing why these questions matter",
-  "questions": ["question 1", "question 2", "question 3", "question 4"],
-  "question_count": 4
-}
-
-Limit: 3-5 questions. Prefer 4 for complex decisions, 3 for simpler ones.`;
 
 export interface QuestionOutput {
   opening: string;
@@ -89,32 +69,40 @@ export interface QuestionOutput {
 export async function generateInitialQuestions(
   title: string,
   context: string | undefined | null,
-  category: string
+  category: string,
+  founderCtx: FounderContext = {}
 ): Promise<QuestionOutput> {
-  const framework = QUESTION_FRAMEWORKS[category] || QUESTION_FRAMEWORKS.other;
-  const decisionInput = context
-    ? `Decision: "${title}"\nContext provided: ${context}`
-    : `Decision: "${title}"\nNo additional context provided.`;
+  const decisionDescription = context
+    ? `"${title}"\n\nAdditional context: ${context}`
+    : `"${title}"`;
+
+  const lens = QUESTION_LENSES[category] ?? QUESTION_LENSES.other;
+
+  const messages = assembleQuestionPrompt(decisionDescription, category, founderCtx);
+  // Inject category lens into system message
+  messages[0].content += `\n\n---\n\n${lens}`;
+  // Override user message with explicit JSON format instruction
+  messages[messages.length - 1].content = `${decisionDescription}
+
+Generate 3–5 probing questions. Return ONLY valid JSON:
+{
+  "opening": "One sentence acknowledging the decision and framing why these questions matter",
+  "questions": ["question 1", "question 2", "question 3"],
+  "question_count": 3
+}`;
 
   try {
     const openai = getAIClient();
     const response = await openai.chat.completions.create({
       model: getModel("reasoning"),
-      messages: [
-        {
-          role: "system",
-          content: `${BASE_QUESTION_SYSTEM}\n\n${framework}`,
-        },
-        { role: "user", content: decisionInput },
-      ],
+      messages: messages as Parameters<typeof openai.chat.completions.create>[0]["messages"],
       temperature: 0.4,
-      max_tokens: 600,
+      max_tokens: 700,
       ...(supportsJsonMode() ? { response_format: { type: "json_object" as const } } : {}),
     });
 
-    const raw = response.choices[0]?.message?.content || "{}";
-    const parsed = JSON.parse(raw) as QuestionOutput;
-    return parsed;
+    const raw = response.choices[0]?.message?.content ?? "{}";
+    return JSON.parse(raw) as QuestionOutput;
   } catch {
     return getFallbackQuestions(category, title);
   }

@@ -1,4 +1,5 @@
 import { getAIClient, getModel, supportsJsonMode } from "../ai-client";
+import { assembleAnalysisPrompt, type FounderContext } from "../prompts";
 import type { ReasoningContext } from "./contextBuilder";
 import type { DetectedBias } from "./biasDetector";
 
@@ -14,94 +15,71 @@ export interface StructuredAnalysis {
   confidence: "Low" | "Medium" | "High";
   confidence_reasoning: string;
   next_steps: string[];
+  reflection_question: string;
   detected_biases: DetectedBias[];
 }
-
-const ANALYSIS_SYSTEM_PROMPT = `You are an experienced, candid startup co-founder helping analyze a strategic decision.
-
-You reason in this order:
-1. CLARIFY — Restate the real decision (not what was asked, but what needs deciding)
-2. TRADEOFFS — What improves vs. worsens with each path?
-3. RISKS — Short-term vs. long-term. Likelihood and mitigation.
-4. SECOND ORDER — What happens AFTER the decision succeeds?
-5. RECOMMENDATION — Directional guidance with explicit reasoning. Never pretend certainty.
-
-GUARDRAILS:
-- Never guarantee success
-- Never ignore downside scenarios
-- Always explain WHY not just WHAT
-- Be specific to this context, not generic startup advice
-- Confidence is "High" only when constraints are clear and alternatives are weak
-
-Return ONLY valid JSON matching this exact schema:
-{
-  "summary": "2-3 sentence summary of the decision and its stakes",
-  "decision_reframe": "Often the stated question is not the real question. Reframe what actually needs to be decided in one sentence.",
-  "key_insights": ["3-5 insights that the founder may not have fully considered"],
-  "tradeoffs": [
-    {
-      "doing_this": "What improves if they proceed",
-      "not_doing_this": "What they give up or risk if they don't proceed"
-    }
-  ],
-  "risks": [
-    {
-      "risk": "Specific risk",
-      "likelihood": "Low | Medium | High",
-      "mitigation": "Specific mitigation action"
-    }
-  ],
-  "second_order_effects": ["What happens AFTER this decision succeeds? List 2-3 second-order consequences."],
-  "recommendation": "Clear directional recommendation in 1-2 sentences",
-  "recommendation_reasoning": "The explicit reasoning chain behind the recommendation",
-  "confidence": "Low | Medium | High",
-  "confidence_reasoning": "Why this confidence level, what information is missing",
-  "next_steps": ["3-5 concrete, specific next actions"],
-  "detected_biases": []
-}`;
 
 export async function generateStructuredAnalysis(
   title: string,
   category: string,
   context: ReasoningContext,
   detectedBiases: DetectedBias[],
-  messages: Array<{ role: string; content: string }>
+  messages: Array<{ role: string; content: string }>,
+  founderCtx: FounderContext = {}
 ): Promise<StructuredAnalysis> {
-  const contextSummary = JSON.stringify(context, null, 2);
-  const conversationSummary = messages
-    .filter((m) => m.role !== "system")
-    .slice(-12) // Last 12 messages to stay within context
-    .map((m) => `${m.role === "user" ? "Founder" : "AI"}: ${m.content}`)
-    .join("\n\n");
+  // Build the structured context for the assembler
+  const structuredContext = {
+    primary_goal: context.primary_goal || context.goal,
+    constraints: context.constraints,
+    assumptions: context.assumptions,
+    risks: context.risks,
+    unknowns: context.unknowns || [],
+  };
 
-  const userPrompt = `Decision: "${title}" (Category: ${category})
+  // Limit to last 12 messages for context window efficiency
+  const recentMessages = messages.slice(-12);
 
-Extracted Context:
-${contextSummary}
+  const assembled = assembleAnalysisPrompt(
+    title,
+    structuredContext,
+    recentMessages,
+    founderCtx
+  );
 
-Conversation:
-${conversationSummary}
+  // Append detected biases info to user message
+  if (detectedBiases.length > 0) {
+    assembled[assembled.length - 1].content += `\n\nPre-detected cognitive biases:\n${JSON.stringify(detectedBiases, null, 2)}`;
+  }
 
-Detected biases from founder's reasoning: ${detectedBiases.length > 0 ? JSON.stringify(detectedBiases) : "None detected"}
-
-Generate the full structured analysis.`;
+  // Override JSON schema to match our StructuredAnalysis interface exactly
+  assembled[assembled.length - 1].content += `\n\nReturn ONLY valid JSON with this EXACT schema:
+{
+  "summary": "2-3 sentence summary",
+  "decision_reframe": "What actually needs deciding (often different from what was asked)",
+  "key_insights": ["3-5 insights the founder may have missed"],
+  "tradeoffs": [{"doing_this": "...", "not_doing_this": "..."}],
+  "risks": [{"risk": "...", "likelihood": "Low|Medium|High", "mitigation": "..."}],
+  "second_order_effects": ["2-3 downstream consequences"],
+  "recommendation": "Clear directional recommendation",
+  "recommendation_reasoning": "Reasoning chain behind the recommendation",
+  "confidence": "Low|Medium|High",
+  "confidence_reasoning": "Why this confidence level",
+  "next_steps": ["3-5 concrete actions"],
+  "reflection_question": "One question for the founder to sit with"
+}`;
 
   try {
     const openai = getAIClient();
     const response = await openai.chat.completions.create({
       model: getModel("reasoning"),
-      messages: [
-        { role: "system", content: ANALYSIS_SYSTEM_PROMPT },
-        { role: "user", content: userPrompt },
-      ],
+      messages: assembled as Parameters<typeof openai.chat.completions.create>[0]["messages"],
       temperature: 0.3,
-      max_tokens: 2000,
+      max_tokens: 2500,
       ...(supportsJsonMode() ? { response_format: { type: "json_object" as const } } : {}),
     });
 
     const raw = response.choices[0]?.message?.content || "{}";
     const parsed = JSON.parse(raw) as StructuredAnalysis;
-    // Merge biases into analysis
     parsed.detected_biases = detectedBiases;
     return parsed;
   } catch (err) {

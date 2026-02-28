@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getReasoningResponse, type ChatMessage } from "@/lib/decision-engine";
+import { getFounderContext } from "@/lib/api-helpers";
 
 export async function POST(
   req: NextRequest,
@@ -29,6 +30,9 @@ export async function POST(
     return NextResponse.json({ error: "Message is required" }, { status: 400 });
   }
 
+  // Load founder personality context
+  const founderCtx = await getFounderContext(session.user.id);
+
   // Save user message
   await prisma.message.create({
     data: {
@@ -45,18 +49,22 @@ export async function POST(
   }));
   conversationHistory.push({ role: "user", content: message });
 
-  // Get AI response via reasoning engine
+  // Get AI response via reasoning engine with personality
+  const startMs = Date.now();
   const aiResponse = await getReasoningResponse(
     conversationHistory,
     decision.title,
-    decision.category || "other"
+    decision.category || "other",
+    founderCtx
   );
+  const latencyMs = Date.now() - startMs;
 
-  // Save AI response
+  // Save AI response with metadata
   const aiMessage = await prisma.message.create({
     data: {
       role: "assistant",
       content: aiResponse,
+      metadata: JSON.stringify({ latencyMs }),
       decisionId: decision.id,
     },
   });

@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { name, value, unit, date } = body;
+  const { name, value, unit, date, label, note, period } = body;
 
   if (!name || value === undefined) {
     return NextResponse.json(
@@ -46,6 +46,9 @@ export async function POST(req: NextRequest) {
       name,
       value: parseFloat(value),
       unit,
+      label,
+      note,
+      period,
       date: date ? new Date(date) : new Date(),
       userId: session.user.id,
     },

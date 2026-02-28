@@ -7,61 +7,144 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ─── USER ─────────────────────────────────────────────────────────────────
+
 model User {
-  id             String     @id @default(cuid())
+  id             String      @id @default(cuid())
   name           String?
-  email          String     @unique
+  email          String      @unique
   hashedPassword String
   companyName    String?
   industry       String?
-  stage          String?    // "idea", "pre-seed", "seed", "series-a", etc.
+  stage          String?     // "idea" | "pre-seed" | "seed" | "series-a" | "growth"
   monthlyBurn    Float?
-  runway         Float?     // in months
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
-  decisions      Decision[]
-  metrics        Metric[]
+  runway         Float?      // months
+  teamSize       Int?
+  website        String?
+
+  // Personality layer — inferred or self-declared
+  personalityType     String?   // "aggressive_builder" | "cautious_planner" | "visionary" | "operator"
+  riskTolerance       String?   // "low" | "medium" | "high"
+  decisionSpeed       String?   // "fast" | "measured" | "slow"
+  onboardingCompleted Boolean   @default(false)
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  decisions  Decision[]
+  metrics    Metric[]
+  insights   FounderInsight[]
+
+  @@index([email])
 }
+
+// ─── DECISION ─────────────────────────────────────────────────────────────
 
 model Decision {
-  id             String          @id @default(cuid())
-  title          String
-  context        String?         @db.Text
-  category       String?         // "hiring", "pricing", "fundraising", "product", "operations", "other"
-  status         String          @default("in_progress") // "in_progress", "decided", "tracking", "completed"
-  finalDecision  String?         @db.Text
-  outcome        String?         @db.Text
-  outcomeRating  Int?            // 1-5
-  aiAnalysis     String?         @db.Text
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  decidedAt      DateTime?
-  userId         String
-  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  messages       Message[]
+  id          String   @id @default(cuid())
+  title       String
+  context     String?  @db.Text
+  category    String?  // "hiring" | "pricing" | "fundraising" | "product" | "operations" | "other"
+  urgency     String?  // "low" | "medium" | "high" | "critical"
+  horizon     String?  // "immediate" | "short_term" | "long_term"
+
+  // Status lifecycle: drafting → questioning → analyzing → decided → tracking → completed
+  status      String   @default("questioning")
+
+  // Decision result
+  finalDecision   String?   @db.Text
+  decidedAt       DateTime?
+
+  // Outcome tracking (filled in later)
+  outcome         String?  @db.Text
+  outcomeRating   Int?     // 1–5
+  outcomeTrackedAt DateTime?
+
+  // AI outputs (stored as JSON strings)
+  aiQuestions         String?  @db.Text  // JSON: { questions: string[] }
+  aiStructuredContext String?  @db.Text  // JSON: ReasoningContext
+  aiAnalysis          String?  @db.Text  // JSON: StructuredAnalysis
+  analysisVersion     Int      @default(1)
+
+  // Personality used when generating analysis
+  personalitySnapshot String?  // snapshot of personality type at analysis time
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  userId   String
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages Message[]
+  tags     DecisionTag[]
 
   @@index([userId])
+  @@index([userId, status])
+  @@index([userId, category])
 }
+
+// ─── DECISION TAG ─────────────────────────────────────────────────────────
+
+model DecisionTag {
+  id         String   @id @default(cuid())
+  name       String
+  decisionId String
+  decision   Decision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+
+  @@unique([decisionId, name])
+  @@index([decisionId])
+}
+
+// ─── MESSAGE ──────────────────────────────────────────────────────────────
 
 model Message {
   id         String   @id @default(cuid())
-  role       String   // "user", "assistant", "system"
+  role       String   // "user" | "assistant" | "system"
   content    String   @db.Text
+  metadata   String?  @db.Text  // JSON: { promptTokens, completionTokens, model, latencyMs }
   createdAt  DateTime @default(now())
+
   decisionId String
   decision   Decision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
 
   @@index([decisionId])
 }
 
+// ─── METRIC ───────────────────────────────────────────────────────────────
+
 model Metric {
-  id        String   @id @default(cuid())
-  name      String   // "mrr", "burn_rate", "runway", "customers", "churn"
-  value     Float
-  unit      String?  // "$", "months", "%", "count"
-  date      DateTime @default(now())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id       String   @id @default(cuid())
+  name     String   // "mrr" | "arr" | "burn_rate" | "runway" | "customers" | "churn_rate" | "cac" | "ltv" | "nps" | "custom"
+  value    Float
+  unit     String?  // "$" | "months" | "%" | "count"
+  label    String?  // human-readable label for custom metrics
+  note     String?  @db.Text
+  date     DateTime @default(now())
+  period   String?  // "2025-01" for monthly snapshots
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, name])
+  @@index([userId, date])
 }
+
+// ─── FOUNDER INSIGHT ─────────────────────────────────────────────────────
+// AI-generated cross-decision patterns surfaced over time.
+
+model FounderInsight {
+  id        String   @id @default(cuid())
+  type      String   // "pattern" | "bias" | "strength" | "blind_spot"
+  title     String
+  body      String   @db.Text
+  severity  String?  // "info" | "warning" | "critical"
+  dismissed Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, type])
+}
+

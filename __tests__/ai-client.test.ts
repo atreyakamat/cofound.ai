@@ -120,22 +120,22 @@ describe("getModel", () => {
 
 describe("supportsJsonMode", () => {
   it("returns true for openai provider", () => {
-    process.env = { AI_PROVIDER: "openai", OPENAI_API_KEY: "sk-test" };
+    setEnv({ AI_PROVIDER: "openai", OPENAI_API_KEY: "sk-test" });
     expect(supportsJsonMode()).toBe(true);
   });
 
   it("returns true for openrouter provider", () => {
-    process.env = { AI_PROVIDER: "openrouter", OPENROUTER_API_KEY: "sk-or-test" };
+    setEnv({ AI_PROVIDER: "openrouter", OPENROUTER_API_KEY: "sk-or-test" });
     expect(supportsJsonMode()).toBe(true);
   });
 
   it("returns false for ollama provider by default", () => {
-    process.env = { AI_PROVIDER: "ollama" };
+    setEnv({ AI_PROVIDER: "ollama" });
     expect(supportsJsonMode()).toBe(false);
   });
 
   it("returns true for ollama when OLLAMA_JSON_MODE=true", () => {
-    process.env = { AI_PROVIDER: "ollama", OLLAMA_JSON_MODE: "true" };
+    setEnv({ AI_PROVIDER: "ollama", OLLAMA_JSON_MODE: "true" });
     expect(supportsJsonMode()).toBe(true);
   });
 });
@@ -144,24 +144,23 @@ describe("supportsJsonMode", () => {
 
 describe("getAIClient", () => {
   it("throws when OPENAI_API_KEY is missing for openai provider", () => {
-    process.env = { AI_PROVIDER: "openai" };
+    setEnv({ AI_PROVIDER: "openai" });
     expect(() => getAIClient()).toThrow("OPENAI_API_KEY is required");
   });
 
   it("throws when OPENROUTER_API_KEY is missing for openrouter provider", () => {
-    process.env = { AI_PROVIDER: "openrouter" };
+    setEnv({ AI_PROVIDER: "openrouter" });
     expect(() => getAIClient()).toThrow("OPENROUTER_API_KEY is required");
   });
 
   it("does not throw for ollama provider (no key needed)", () => {
-    process.env = { AI_PROVIDER: "ollama" };
+    setEnv({ AI_PROVIDER: "ollama" });
     expect(() => getAIClient()).not.toThrow();
   });
 
   it("creates an OpenAI client with correct baseURL for ollama", () => {
-    process.env = { AI_PROVIDER: "ollama", OLLAMA_BASE_URL: "http://myserver:11434/v1" };
+    setEnv({ AI_PROVIDER: "ollama", OLLAMA_BASE_URL: "http://myserver:11434/v1" });
     const client = getAIClient();
-    // The baseURL should point to our Ollama instance
     expect((client as any).baseURL).toContain("myserver:11434");
   });
 });

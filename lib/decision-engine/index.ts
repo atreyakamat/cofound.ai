@@ -22,3 +22,6 @@ export type { StructuredAnalysis } from "./analysisGenerator";
 
 export { getReasoningResponse } from "./reasoningEngine";
 export type { ChatMessage } from "./reasoningEngine";
+
+// Re-export prompt stack types for API routes
+export type { FounderContext } from "../prompts";

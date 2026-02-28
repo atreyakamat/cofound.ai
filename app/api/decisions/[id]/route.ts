@@ -35,12 +35,23 @@ export async function PATCH(
 
   const body = await req.json();
 
+  // Build update data with proper lifecycle timestamps
+  const allowed = [
+    "title", "context", "category", "urgency", "horizon",
+    "status", "finalDecision", "outcome", "outcomeRating",
+  ];
+  const data: Record<string, unknown> = {};
+  for (const key of allowed) {
+    if (body[key] !== undefined) data[key] = body[key];
+  }
+
+  // Status lifecycle timestamps
+  if (data.status === "decided") data.decidedAt = new Date();
+  if (data.outcome || data.outcomeRating) data.outcomeTrackedAt = new Date();
+
   const decision = await prisma.decision.updateMany({
     where: { id: params.id, userId: session.user.id },
-    data: {
-      ...body,
-      ...(body.status === "decided" ? { decidedAt: new Date() } : {}),
-    },
+    data,
   });
 
   if (decision.count === 0) {
@@ -49,7 +60,10 @@ export async function PATCH(
 
   const updated = await prisma.decision.findUnique({
     where: { id: params.id },
-    include: { messages: { orderBy: { createdAt: "asc" } } },
+    include: {
+      messages: { orderBy: { createdAt: "asc" } },
+      tags: true,
+    },
   });
 
   return NextResponse.json(updated);

@@ -7,6 +7,7 @@ import {
   generateInitialQuestions,
   formatQuestionsAsMessage,
 } from "@/lib/decision-engine";
+import { getFounderContext } from "@/lib/api-helpers";
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -51,14 +52,15 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    // Load founder context for personality-aware question generation
+    const founderCtx = await getFounderContext(session.user.id);
+
     // Run classifier and question engine in parallel
     const [classification, questionOutput] = await Promise.all([
       classifyDecision(title, context),
       (async () => {
-        // We need the category for the question framework — use keyword inference first,
-        // then the classifier result will be consistent since both run together
         const inferredCategory = category || "other";
-        return generateInitialQuestions(title, context, inferredCategory);
+        return generateInitialQuestions(title, context, inferredCategory, founderCtx);
       })(),
     ]);
 
@@ -70,6 +72,9 @@ export async function POST(req: NextRequest) {
         title,
         context,
         category: resolvedCategory,
+        urgency: classification.risk_level ? (classification.risk_level === "High" ? "high" : classification.risk_level === "Medium" ? "medium" : "low") : null,
+        horizon: classification.time_horizon ?? null,
+        aiQuestions: JSON.stringify(questionOutput),
         userId: session.user.id,
         messages: {
           create: [

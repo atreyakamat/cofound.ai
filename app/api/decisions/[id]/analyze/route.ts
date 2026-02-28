@@ -9,6 +9,7 @@ import {
   serializeAnalysis,
 } from "@/lib/decision-engine";
 import type { ChatMessage } from "@/lib/decision-engine";
+import { getFounderContext } from "@/lib/api-helpers";
 
 export async function POST(
   req: NextRequest,
@@ -28,6 +29,9 @@ export async function POST(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
+  // Load founder context for personality-aware analysis
+  const founderCtx = await getFounderContext(session.user.id);
+
   const conversationHistory: ChatMessage[] = decision.messages.map((m: { role: string; content: string }) => ({
     role: m.role as "user" | "assistant",
     content: m.content,
@@ -44,18 +48,19 @@ export async function POST(
       detectBiases(conversationHistory),
     ]);
 
-    // Generate structured analysis
+    // Generate structured analysis with full prompt stack
     const analysis = await generateStructuredAnalysis(
       decision.title,
       decision.category || "other",
       context,
       biases,
-      conversationHistory
+      conversationHistory,
+      founderCtx
     );
 
     const serialized = serializeAnalysis(analysis);
 
-    // Save analysis as a special message and update decision
+    // Save analysis and update decision with all structured data
     await prisma.message.create({
       data: {
         role: "assistant",
@@ -68,6 +73,8 @@ export async function POST(
       where: { id: decision.id },
       data: {
         aiAnalysis: serialized,
+        aiStructuredContext: JSON.stringify(context),
+        personalitySnapshot: founderCtx.personality ?? null,
         status: "decided",
         decidedAt: new Date(),
       },
