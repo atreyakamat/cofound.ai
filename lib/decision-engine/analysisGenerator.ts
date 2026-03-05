@@ -1,4 +1,4 @@
-import { getAIClient, getModel, supportsJsonMode } from "../ai-client";
+import { chatCompletion } from "../ai-client";
 import { assembleAnalysisPrompt, type FounderContext } from "../prompts";
 import type { ReasoningContext } from "./contextBuilder";
 import type { DetectedBias } from "./biasDetector";
@@ -69,17 +69,15 @@ export async function generateStructuredAnalysis(
 }`;
 
   try {
-    const openai = getAIClient();
-    const response = await openai.chat.completions.create({
-      model: getModel("reasoning"),
-      messages: assembled as Parameters<typeof openai.chat.completions.create>[0]["messages"],
+    const raw = await chatCompletion({
+      task: "reasoning",
+      messages: assembled,
       temperature: 0.3,
-      max_tokens: 2500,
-      ...(supportsJsonMode() ? { response_format: { type: "json_object" as const } } : {}),
+      maxTokens: 2500,
+      json: true,
     });
 
-    const raw = response.choices[0]?.message?.content || "{}";
-    const parsed = JSON.parse(raw) as StructuredAnalysis;
+    const parsed = JSON.parse(raw || "{}") as StructuredAnalysis;
     parsed.detected_biases = detectedBiases;
     return parsed;
   } catch (err) {

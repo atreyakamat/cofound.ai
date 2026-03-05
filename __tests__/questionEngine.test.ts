@@ -4,9 +4,7 @@
  */
 
 jest.mock("@/lib/ai-client", () => ({
-  getAIClient: jest.fn(),
-  getModel: jest.fn(() => "gpt-4o"),
-  supportsJsonMode: jest.fn(() => true),
+  chatCompletion: jest.fn(),
 }));
 
 import {
@@ -14,21 +12,13 @@ import {
   formatQuestionsAsMessage,
 } from "@/lib/decision-engine/questionEngine";
 import type { QuestionOutput } from "@/lib/decision-engine/questionEngine";
-import { getAIClient } from "@/lib/ai-client";
+import { chatCompletion } from "@/lib/ai-client";
 
-const mockCreate = jest.fn();
+const mockChatCompletion = chatCompletion as jest.MockedFunction<typeof chatCompletion>;
+
 beforeEach(() => {
-  mockCreate.mockReset();
-  (getAIClient as jest.Mock).mockReturnValue({
-    chat: { completions: { create: mockCreate } },
-  });
+  mockChatCompletion.mockReset();
 });
-
-function mockAIResponse(content: string) {
-  mockCreate.mockResolvedValueOnce({
-    choices: [{ message: { content } }],
-  });
-}
 
 const SAMPLE_QUESTIONS: QuestionOutput = {
   opening: "Before I give you my view on this hiring decision, I need to understand a few things.",
@@ -44,57 +34,57 @@ const SAMPLE_QUESTIONS: QuestionOutput = {
 
 describe("generateInitialQuestions", () => {
   it("returns parsed questions from AI response", async () => {
-    mockAIResponse(JSON.stringify(SAMPLE_QUESTIONS));
+    mockChatCompletion.mockResolvedValueOnce(JSON.stringify(SAMPLE_QUESTIONS));
     const result = await generateInitialQuestions("Hire a VP Engineering", undefined, "hiring");
     expect(result.questions).toHaveLength(3);
     expect(result.opening).toContain("hiring decision");
   });
 
   it("falls back to hardcoded questions when AI fails", async () => {
-    mockCreate.mockRejectedValueOnce(new Error("Timeout"));
+    mockChatCompletion.mockRejectedValueOnce(new Error("Timeout"));
     const result = await generateInitialQuestions("Some hiring decision", undefined, "hiring");
     expect(result.questions.length).toBeGreaterThan(0);
     expect(result.opening).toBeDefined();
   });
 
   it("falls back to 'other' category questions for unknown category", async () => {
-    mockCreate.mockRejectedValueOnce(new Error("Timeout"));
+    mockChatCompletion.mockRejectedValueOnce(new Error("Timeout"));
     const result = await generateInitialQuestions("Weird decision", undefined, "something_unknown");
     expect(result.questions.length).toBeGreaterThan(0);
   });
 
   it("includes context in the user message when provided", async () => {
-    mockAIResponse(JSON.stringify(SAMPLE_QUESTIONS));
+    mockChatCompletion.mockResolvedValueOnce(JSON.stringify(SAMPLE_QUESTIONS));
     await generateInitialQuestions("Hire a CTO", "We're pre-seed, 12 months runway", "hiring");
 
-    const callArgs = mockCreate.mock.calls[0][0];
-    const userMsg = callArgs.messages[1].content;
-    expect(userMsg).toContain("pre-seed");
-    expect(userMsg).toContain("12 months runway");
+    const callArgs = mockChatCompletion.mock.calls[0][0];
+    const userMsg = callArgs.messages[callArgs.messages.length - 1];
+    expect(userMsg.content).toContain("pre-seed");
+    expect(userMsg.content).toContain("12 months runway");
   });
 
   it("uses the 'hiring' framework when category is hiring", async () => {
-    mockAIResponse(JSON.stringify(SAMPLE_QUESTIONS));
+    mockChatCompletion.mockResolvedValueOnce(JSON.stringify(SAMPLE_QUESTIONS));
     await generateInitialQuestions("Hire a designer", null, "hiring");
 
-    const callArgs = mockCreate.mock.calls[0][0];
-    const systemMsg = callArgs.messages[0].content;
-    expect(systemMsg).toContain("HIRING");
-    expect(systemMsg).toContain("runway");
+    const callArgs = mockChatCompletion.mock.calls[0][0];
+    const systemMsg = callArgs.messages[0];
+    expect(systemMsg.content).toContain("HIRING");
+    expect(systemMsg.content).toContain("runway");
   });
 
   it("uses the 'pricing' framework when category is pricing", async () => {
-    mockAIResponse(JSON.stringify(SAMPLE_QUESTIONS));
+    mockChatCompletion.mockResolvedValueOnce(JSON.stringify(SAMPLE_QUESTIONS));
     await generateInitialQuestions("Change pricing model", null, "pricing");
 
-    const callArgs = mockCreate.mock.calls[0][0];
-    const systemMsg = callArgs.messages[0].content;
-    expect(systemMsg).toContain("PRICING");
+    const callArgs = mockChatCompletion.mock.calls[0][0];
+    const systemMsg = callArgs.messages[0];
+    expect(systemMsg.content).toContain("PRICING");
   });
 
   it("returns 3-5 questions only", async () => {
     // AI returns 4 questions
-    mockAIResponse(JSON.stringify({
+    mockChatCompletion.mockResolvedValueOnce(JSON.stringify({
       ...SAMPLE_QUESTIONS,
       questions: ["Q1", "Q2", "Q3", "Q4"],
       question_count: 4,

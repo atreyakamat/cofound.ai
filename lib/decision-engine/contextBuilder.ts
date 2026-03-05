@@ -1,4 +1,4 @@
-import { getAIClient, getModel, supportsJsonMode } from "../ai-client";
+import { chatCompletion } from "../ai-client";
 import { assembleContextPrompt } from "../prompts";
 
 export interface ReasoningContext {
@@ -22,17 +22,15 @@ export async function buildReasoningContext(
   assembledMessages[assembledMessages.length - 1].content += `\n\nCategory: ${category}`;
 
   try {
-    const openai = getAIClient();
-    const response = await openai.chat.completions.create({
-      model: getModel("fast"),
-      messages: assembledMessages as Parameters<typeof openai.chat.completions.create>[0]["messages"],
+    const raw = await chatCompletion({
+      task: "fast",
+      messages: assembledMessages,
       temperature: 0,
-      max_tokens: 900,
-      ...(supportsJsonMode() ? { response_format: { type: "json_object" as const } } : {}),
+      maxTokens: 900,
+      json: true,
     });
 
-    const raw = response.choices[0]?.message?.content || "{}";
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.parse(raw || "{}");
     return {
       primary_goal: parsed.primary_goal || parsed.goal || title,
       goal: parsed.primary_goal || parsed.goal || title,

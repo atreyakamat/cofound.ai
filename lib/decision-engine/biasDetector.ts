@@ -1,4 +1,4 @@
-import { getAIClient, getModel, supportsJsonMode } from "../ai-client";
+import { chatCompletion } from "../ai-client";
 
 export interface DetectedBias {
   bias: string;
@@ -45,20 +45,18 @@ export async function detectBiases(
   if (founderMessages.length < 100) return []; // Not enough data
 
   try {
-    const openai = getAIClient();
-    const response = await openai.chat.completions.create({
-      model: getModel("fast"),
+    const raw = await chatCompletion({
+      task: "fast",
       messages: [
         { role: "system", content: BIAS_DETECTOR_PROMPT },
         { role: "user", content: `Founder statements:\n${founderMessages}` },
       ],
       temperature: 0,
-      max_tokens: 600,
-      ...(supportsJsonMode() ? { response_format: { type: "json_object" as const } } : {}),
+      maxTokens: 600,
+      json: true,
     });
 
-    const raw = response.choices[0]?.message?.content || '{"detected_biases":[]}';
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.parse(raw || '{"detected_biases":[]}');
     return parsed.detected_biases || [];
   } catch {
     return [];

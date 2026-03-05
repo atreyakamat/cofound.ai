@@ -1,4 +1,4 @@
-import { getAIClient, getModel, supportsJsonMode } from "../ai-client";
+import { chatCompletion } from "../ai-client";
 import { assembleQuestionPrompt, type FounderContext } from "../prompts";
 
 // Category-specific question lenses injected alongside the master system prompt
@@ -92,17 +92,15 @@ Generate 3–5 probing questions. Return ONLY valid JSON:
 }`;
 
   try {
-    const openai = getAIClient();
-    const response = await openai.chat.completions.create({
-      model: getModel("reasoning"),
-      messages: messages as Parameters<typeof openai.chat.completions.create>[0]["messages"],
+    const raw = await chatCompletion({
+      task: "reasoning",
+      messages,
       temperature: 0.4,
-      max_tokens: 700,
-      ...(supportsJsonMode() ? { response_format: { type: "json_object" as const } } : {}),
+      maxTokens: 700,
+      json: true,
     });
 
-    const raw = response.choices[0]?.message?.content ?? "{}";
-    return JSON.parse(raw) as QuestionOutput;
+    return JSON.parse(raw || "{}") as QuestionOutput;
   } catch {
     return getFallbackQuestions(category, title);
   }

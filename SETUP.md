@@ -48,44 +48,11 @@ NEXTAUTH_URL="http://localhost:3000"
 
 ### AI Provider (pick one)
 
-#### Option A — OpenAI (default)
-```dotenv
-AI_PROVIDER="openai"
-OPENAI_API_KEY="sk-..."
-```
-Get your key at [platform.openai.com/api-keys](https://platform.openai.com/api-keys).
+CofounderAI supports **7 AI providers** with a local-first philosophy. Ollama is prioritized by default — no API key, no cost, no data leaving your machine.
 
----
+#### Option A — Ollama (LOCAL FIRST — recommended to start)
 
-#### Option B — OpenRouter (recommended for flexibility)
-One API key gives you access to OpenAI, Anthropic, Google, Meta, Mistral, DeepSeek, and more.
-
-```dotenv
-AI_PROVIDER="openrouter"
-OPENROUTER_API_KEY="sk-or-..."
-
-# Optional — override which models to use:
-OPENROUTER_FAST_MODEL="openai/gpt-4o-mini"       # classifier, context, bias detection
-OPENROUTER_REASONING_MODEL="openai/gpt-4o"        # analysis + chat engine
-```
-
-Get your key at [openrouter.ai/keys](https://openrouter.ai/keys).
-
-**Popular model combinations for OpenRouter:**
-
-| Use Case | Fast Model | Reasoning Model |
-|----------|-----------|-----------------|
-| Best quality | `openai/gpt-4o-mini` | `openai/gpt-4o` |
-| Budget-friendly | `anthropic/claude-3-haiku` | `anthropic/claude-3-5-sonnet` |
-| Latest Google | `google/gemini-2.0-flash` | `google/gemini-2.0-flash-thinking-exp` |
-| Open source | `meta-llama/llama-3.3-70b-instruct` | `meta-llama/llama-3.3-70b-instruct` |
-| Reasoning specialist | `openai/gpt-4o-mini` | `deepseek/deepseek-r1` |
-
----
-
-#### Option C — Ollama (fully local, no API cost)
-
-Run AI models on your own machine — 100% private, no API fees.
+Run AI models on your own machine — 100% private, no API fees. **This is the default.**
 
 **Setup:**
 ```bash
@@ -122,6 +89,132 @@ OLLAMA_JSON_MODE="true"
 | `qwen2.5:7b` | `qwen2.5:7b` | 6 GB |
 | `qwen2.5:7b` | `qwen2.5:32b` | 24 GB |
 | `llama3.2` | `deepseek-r1:8b` | 8 GB |
+
+---
+
+#### Option B — Anthropic Claude (direct API)
+
+Best-in-class reasoning quality. No wrapper — calls Anthropic's API natively.
+
+```dotenv
+AI_PROVIDER="anthropic"
+ANTHROPIC_API_KEY="sk-ant-..."
+```
+
+Get your key at [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys).
+
+| Fast Model (default) | Reasoning Model (default) |
+|---------------------|--------------------------|
+| `claude-3-5-haiku-20241022` | `claude-sonnet-4-20250514` |
+
+Custom base URL (for proxies or AWS Bedrock adapter):
+```dotenv
+ANTHROPIC_BASE_URL="https://your-proxy.example.com"
+```
+
+---
+
+#### Option C — Google Gemini (direct API)
+
+Fast, capable, generous free tier.
+
+```dotenv
+AI_PROVIDER="google"
+GOOGLE_AI_API_KEY="AIza..."
+# or: GEMINI_API_KEY="AIza..."
+```
+
+Get your key at [aistudio.google.com/apikey](https://aistudio.google.com/apikey).
+
+| Fast Model (default) | Reasoning Model (default) |
+|---------------------|--------------------------|
+| `gemini-2.0-flash` | `gemini-2.0-flash` |
+
+---
+
+#### Option D — Groq (ultra-fast open model inference)
+
+Blazing-fast inference for open models (Llama, Mixtral). Great for snappy UX.
+
+```dotenv
+AI_PROVIDER="groq"
+GROQ_API_KEY="gsk_..."
+```
+
+Get your key at [console.groq.com/keys](https://console.groq.com/keys).
+
+| Fast Model (default) | Reasoning Model (default) |
+|---------------------|--------------------------|
+| `llama-3.3-70b-versatile` | `llama-3.3-70b-versatile` |
+
+---
+
+#### Option E — OpenAI
+
+The original. Reliable, well-documented.
+
+```dotenv
+AI_PROVIDER="openai"
+OPENAI_API_KEY="sk-..."
+```
+
+Get your key at [platform.openai.com/api-keys](https://platform.openai.com/api-keys).
+
+| Fast Model (default) | Reasoning Model (default) |
+|---------------------|--------------------------|
+| `gpt-4o-mini` | `gpt-4o` |
+
+---
+
+#### Option F — OpenRouter (any model, one API key)
+
+One API key gives you access to OpenAI, Anthropic, Google, Meta, Mistral, DeepSeek, and more.
+
+```dotenv
+AI_PROVIDER="openrouter"
+OPENROUTER_API_KEY="sk-or-..."
+
+# Optional — override which models to use:
+OPENROUTER_FAST_MODEL="openai/gpt-4o-mini"
+OPENROUTER_REASONING_MODEL="openai/gpt-4o"
+```
+
+Get your key at [openrouter.ai/keys](https://openrouter.ai/keys).
+
+**Popular model combinations for OpenRouter:**
+
+| Use Case | Fast Model | Reasoning Model |
+|----------|-----------|-----------------|
+| Best quality | `openai/gpt-4o-mini` | `openai/gpt-4o` |
+| Budget-friendly | `anthropic/claude-3-haiku` | `anthropic/claude-3-5-sonnet` |
+| Latest Google | `google/gemini-2.0-flash` | `google/gemini-2.0-flash-thinking-exp` |
+| Open source | `meta-llama/llama-3.3-70b-instruct` | `meta-llama/llama-3.3-70b-instruct` |
+| Reasoning specialist | `openai/gpt-4o-mini` | `deepseek/deepseek-r1` |
+
+---
+
+#### Option G — Custom (any OpenAI-compatible endpoint)
+
+Works with LM Studio, vLLM, Together AI, Fireworks, text-generation-webui, and any OpenAI-compatible server.
+
+```dotenv
+AI_PROVIDER="custom"
+CUSTOM_AI_BASE_URL="http://localhost:1234/v1"
+CUSTOM_AI_API_KEY="optional-key"
+CUSTOM_AI_JSON_MODE="true"
+```
+
+---
+
+### Auto-Detection Priority
+
+If you don't set `AI_PROVIDER`, CofounderAI auto-detects based on which env vars are present:
+
+```
+Ollama → Anthropic → Google → Groq → OpenRouter → OpenAI → Custom → Ollama (default)
+```
+
+Ollama is checked first (**local-first philosophy**) and is also the fallback default.
 
 ---
 
@@ -241,24 +334,30 @@ User creates a decision
 | `reasoningEngine.ts` | Drives the conversational probing phase |
 | `analysisGenerator.ts` | Produces full structured `StructuredAnalysis` JSON |
 
-**AI client** (`lib/ai-client.ts`):  
-Single factory that returns an OpenAI-SDK-compatible client regardless of whether you're using OpenAI, OpenRouter, or Ollama. All engine modules use this — switching providers requires only `.env` changes.
+**AI client** (`lib/ai-client.ts`):
+Unified `chatCompletion()` function that works identically across all 7 providers (Ollama, Anthropic, Google, Groq, OpenAI, OpenRouter, Custom). All engine modules use this — switching providers requires only `.env` changes, zero code changes. Anthropic is handled natively via fetch (no SDK dependency). All other providers use the OpenAI SDK with different base URLs.
 
 ---
 
 ## 8. Common Issues
 
 **`Error: OPENAI_API_KEY is required`**  
-→ Set `AI_PROVIDER` and the corresponding key in `.env`
+→ Set `AI_PROVIDER` and the corresponding key in `.env`. Or use Ollama (no key needed).
 
-**`error TS2305: Module '"@prisma/client"' has no exported member 'PrismaClient'`**  
+**`Error: ANTHROPIC_API_KEY is required`**
+→ Set your Anthropic API key from [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys)
+
+**`error TS2305: Module '"@prisma/client"' has no exported member 'PrismaClient'`**
 → Run `npx prisma generate`
 
-**Ollama: `connection refused`**  
+**Ollama: `connection refused`**
 → Make sure `ollama serve` is running (it starts automatically on macOS after install)
 
-**Ollama: garbled JSON in analysis**  
+**Ollama: garbled JSON in analysis**
 → Set `OLLAMA_JSON_MODE=true` — only works with llama3.2, qwen2.5, mistral. For other models, leave it off and the system prompts guide the model to output JSON.
 
-**Port 3000 in use**  
-→ Next.js auto-picks 3001. Or: `PORT=3002 npm run dev`
+**Groq: rate limit errors**
+→ Groq has strict rate limits on free tier. Use a smaller model or add a delay between calls.
+
+**Custom endpoint: JSON parse errors**
+→ Set `CUSTOM_AI_JSON_MODE=true` if your endpoint supports `response_format`. Otherwise, the system prompts guide the model to output JSON.

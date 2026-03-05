@@ -3,27 +3,17 @@
  */
 
 jest.mock("@/lib/ai-client", () => ({
-  getAIClient: jest.fn(),
-  getModel: jest.fn(() => "gpt-4o-mini"),
-  supportsJsonMode: jest.fn(() => true),
+  chatCompletion: jest.fn(),
 }));
 
 import { detectBiases } from "@/lib/decision-engine/biasDetector";
-import { getAIClient } from "@/lib/ai-client";
+import { chatCompletion } from "@/lib/ai-client";
 
-const mockCreate = jest.fn();
+const mockChatCompletion = chatCompletion as jest.MockedFunction<typeof chatCompletion>;
+
 beforeEach(() => {
-  mockCreate.mockReset();
-  (getAIClient as jest.Mock).mockReturnValue({
-    chat: { completions: { create: mockCreate } },
-  });
+  mockChatCompletion.mockReset();
 });
-
-function mockAIResponse(content: string) {
-  mockCreate.mockResolvedValueOnce({
-    choices: [{ message: { content } }],
-  });
-}
 
 const SHORT_MESSAGES = [
   { role: "user", content: "Short message." },
@@ -39,11 +29,11 @@ describe("detectBiases", () => {
   it("returns empty array for messages under 100 chars (not enough signal)", async () => {
     const result = await detectBiases(SHORT_MESSAGES);
     expect(result).toEqual([]);
-    expect(mockCreate).not.toHaveBeenCalled();
+    expect(mockChatCompletion).not.toHaveBeenCalled();
   });
 
   it("detects sunk cost and confirmation biases in long conversation", async () => {
-    mockAIResponse(JSON.stringify({
+    mockChatCompletion.mockResolvedValueOnce(JSON.stringify({
       detected_biases: [
         {
           bias: "Sunk cost fallacy",
@@ -65,30 +55,30 @@ describe("detectBiases", () => {
   });
 
   it("returns empty array when no biases detected", async () => {
-    mockAIResponse(JSON.stringify({ detected_biases: [] }));
+    mockChatCompletion.mockResolvedValueOnce(JSON.stringify({ detected_biases: [] }));
     const result = await detectBiases(LONG_MESSAGES);
     expect(result).toEqual([]);
   });
 
   it("returns empty array when AI call fails", async () => {
-    mockCreate.mockRejectedValueOnce(new Error("Network error"));
+    mockChatCompletion.mockRejectedValueOnce(new Error("Network error"));
     const result = await detectBiases(LONG_MESSAGES);
     expect(result).toEqual([]);
   });
 
   it("only analyzes user (founder) messages, not assistant messages", async () => {
-    mockAIResponse(JSON.stringify({ detected_biases: [] }));
+    mockChatCompletion.mockResolvedValueOnce(JSON.stringify({ detected_biases: [] }));
     await detectBiases(LONG_MESSAGES);
 
-    const callArgs = mockCreate.mock.calls[0][0];
-    const userContent = callArgs.messages[1].content;
-    expect(userContent).toContain("We've already invested $200k");
+    const callArgs = mockChatCompletion.mock.calls[0][0];
+    const userContent = callArgs.messages.find((m: { role: string }) => m.role === "user");
+    expect(userContent?.content).toContain("We've already invested $200k");
     // Should NOT include assistant message content
-    expect(userContent).not.toContain("Interesting — what specific data");
+    expect(userContent?.content).not.toContain("Interesting — what specific data");
   });
 
   it("each returned bias has bias, signal, and reframe fields", async () => {
-    mockAIResponse(JSON.stringify({
+    mockChatCompletion.mockResolvedValueOnce(JSON.stringify({
       detected_biases: [
         {
           bias: "Urgency bias",

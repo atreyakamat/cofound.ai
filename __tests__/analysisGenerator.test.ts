@@ -4,9 +4,7 @@
  */
 
 jest.mock("@/lib/ai-client", () => ({
-  getAIClient: jest.fn(),
-  getModel: jest.fn(() => "gpt-4o"),
-  supportsJsonMode: jest.fn(() => true),
+  chatCompletion: jest.fn(),
 }));
 
 jest.mock("@/lib/prompts", () => ({
@@ -22,22 +20,14 @@ import {
   deserializeAnalysis,
 } from "@/lib/decision-engine/analysisGenerator";
 import type { StructuredAnalysis } from "@/lib/decision-engine/analysisGenerator";
-import { getAIClient } from "@/lib/ai-client";
+import { chatCompletion } from "@/lib/ai-client";
 import { assembleAnalysisPrompt } from "@/lib/prompts";
 
-const mockCreate = jest.fn();
-beforeEach(() => {
-  mockCreate.mockReset();
-  (getAIClient as jest.Mock).mockReturnValue({
-    chat: { completions: { create: mockCreate } },
-  });
-});
+const mockChatCompletion = chatCompletion as jest.MockedFunction<typeof chatCompletion>;
 
-function mockAIResponse(content: string) {
-  mockCreate.mockResolvedValueOnce({
-    choices: [{ message: { content } }],
-  });
-}
+beforeEach(() => {
+  mockChatCompletion.mockReset();
+});
 
 const SAMPLE_ANALYSIS: StructuredAnalysis = {
   summary: "The founder is deciding whether to raise a Series A at a potentially dilutive valuation.",
@@ -148,7 +138,7 @@ describe("generateStructuredAnalysis", () => {
   ];
 
   it("returns structured analysis with all required fields", async () => {
-    mockAIResponse(JSON.stringify(SAMPLE_ANALYSIS));
+    mockChatCompletion.mockResolvedValueOnce(JSON.stringify(SAMPLE_ANALYSIS));
 
     const result = await generateStructuredAnalysis(
       "Raise Series A now",
@@ -167,7 +157,7 @@ describe("generateStructuredAnalysis", () => {
 
   it("merges provided biases into the returned analysis", async () => {
     // Return analysis with empty biases from AI
-    mockAIResponse(JSON.stringify({ ...SAMPLE_ANALYSIS, detected_biases: [] }));
+    mockChatCompletion.mockResolvedValueOnce(JSON.stringify({ ...SAMPLE_ANALYSIS, detected_biases: [] }));
 
     const biases = [
       { bias: "Sunk cost fallacy", signal: "We've invested too much to stop", reframe: "Would you start this path today?" },
@@ -187,14 +177,14 @@ describe("generateStructuredAnalysis", () => {
   });
 
   it("throws when AI fails (caller should handle)", async () => {
-    mockCreate.mockRejectedValueOnce(new Error("Rate limit exceeded"));
+    mockChatCompletion.mockRejectedValueOnce(new Error("Rate limit exceeded"));
     await expect(
       generateStructuredAnalysis("Test", "other", context, [], messages)
     ).rejects.toThrow("Analysis generation failed");
   });
 
   it("only uses last 12 messages for context window efficiency", async () => {
-    mockAIResponse(JSON.stringify(SAMPLE_ANALYSIS));
+    mockChatCompletion.mockResolvedValueOnce(JSON.stringify(SAMPLE_ANALYSIS));
 
     const manyMessages = Array.from({ length: 20 }, (_, i) => ({
       role: i % 2 === 0 ? "user" : "assistant",

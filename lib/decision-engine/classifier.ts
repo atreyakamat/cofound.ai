@@ -1,4 +1,4 @@
-import { getAIClient, getModel, supportsJsonMode } from "../ai-client";
+import { chatCompletion } from "../ai-client";
 
 export interface DecisionClassification {
   decision_type: string;
@@ -37,20 +37,18 @@ export async function classifyDecision(
   const input = context ? `Decision: ${title}\nContext: ${context}` : `Decision: ${title}`;
 
   try {
-    const openai = getAIClient();
-    const response = await openai.chat.completions.create({
-      model: getModel("fast"),
+    const raw = await chatCompletion({
+      task: "fast",
       messages: [
         { role: "system", content: CLASSIFIER_PROMPT },
         { role: "user", content: input },
       ],
       temperature: 0,
-      max_tokens: 200,
-      ...(supportsJsonMode() ? { response_format: { type: "json_object" as const } } : {}),
+      maxTokens: 200,
+      json: true,
     });
 
-    const raw = response.choices[0]?.message?.content || "{}";
-    const parsed = JSON.parse(raw) as DecisionClassification;
+    const parsed = JSON.parse(raw || "{}") as DecisionClassification;
     return parsed;
   } catch {
     // Fallback classification

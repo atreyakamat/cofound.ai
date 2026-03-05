@@ -5,35 +5,21 @@
 
 // Mock the entire ai-client module before importing classifier
 jest.mock("@/lib/ai-client", () => ({
-  getAIClient: jest.fn(),
-  getModel: jest.fn(() => "gpt-4o-mini"),
-  supportsJsonMode: jest.fn(() => true),
+  chatCompletion: jest.fn(),
 }));
 
 import { classifyDecision } from "@/lib/decision-engine/classifier";
-import { getAIClient } from "@/lib/ai-client";
+import { chatCompletion } from "@/lib/ai-client";
 
-const mockCreate = jest.fn();
-(getAIClient as jest.Mock).mockReturnValue({
-  chat: { completions: { create: mockCreate } },
-});
-
-function mockAIResponse(content: string) {
-  mockCreate.mockResolvedValueOnce({
-    choices: [{ message: { content } }],
-  });
-}
+const mockChatCompletion = chatCompletion as jest.MockedFunction<typeof chatCompletion>;
 
 beforeEach(() => {
-  mockCreate.mockReset();
-  (getAIClient as jest.Mock).mockReturnValue({
-    chat: { completions: { create: mockCreate } },
-  });
+  mockChatCompletion.mockReset();
 });
 
 describe("classifyDecision", () => {
   it("parses a valid classification response", async () => {
-    mockAIResponse(JSON.stringify({
+    mockChatCompletion.mockResolvedValueOnce(JSON.stringify({
       decision_type: "Hiring",
       complexity: "High",
       time_horizon: "1-3 months",
@@ -48,7 +34,7 @@ describe("classifyDecision", () => {
   });
 
   it("parses a pricing decision correctly", async () => {
-    mockAIResponse(JSON.stringify({
+    mockChatCompletion.mockResolvedValueOnce(JSON.stringify({
       decision_type: "Pricing",
       complexity: "Medium",
       time_horizon: "Immediate",
@@ -62,7 +48,7 @@ describe("classifyDecision", () => {
   });
 
   it("returns a fallback classification when AI fails", async () => {
-    mockCreate.mockRejectedValueOnce(new Error("API error"));
+    mockChatCompletion.mockRejectedValueOnce(new Error("API error"));
 
     const result = await classifyDecision("Some obscure decision");
     // Should return fallback (not throw)
@@ -71,14 +57,14 @@ describe("classifyDecision", () => {
   });
 
   it("handles malformed JSON response gracefully", async () => {
-    mockAIResponse("not json at all {{{}}}");
+    mockChatCompletion.mockResolvedValueOnce("not json at all {{{}}}");
     const result = await classifyDecision("What to do about our pricing?");
     // Should fall back to keyword-based classification
     expect(result).toBeDefined();
   });
 
   it("passes context to the AI when provided", async () => {
-    mockAIResponse(JSON.stringify({
+    mockChatCompletion.mockResolvedValueOnce(JSON.stringify({
       decision_type: "Fundraising",
       complexity: "High",
       time_horizon: "3-6 months",
@@ -87,13 +73,14 @@ describe("classifyDecision", () => {
     }));
 
     await classifyDecision("Series A timing", "We have 8 months runway");
-    const callArgs = mockCreate.mock.calls[0][0];
-    expect(callArgs.messages[1].content).toContain("Series A timing");
-    expect(callArgs.messages[1].content).toContain("8 months runway");
+    const callArgs = mockChatCompletion.mock.calls[0][0];
+    const userMsg = callArgs.messages.find((m: { role: string }) => m.role === "user");
+    expect(userMsg?.content).toContain("Series A timing");
+    expect(userMsg?.content).toContain("8 months runway");
   });
 
-  it("uses the model returned by getModel", async () => {
-    mockAIResponse(JSON.stringify({
+  it("uses fast task tier for classification", async () => {
+    mockChatCompletion.mockResolvedValueOnce(JSON.stringify({
       decision_type: "Product",
       complexity: "Low",
       time_horizon: "Immediate",
@@ -102,7 +89,7 @@ describe("classifyDecision", () => {
     }));
 
     await classifyDecision("Ship the new dashboard?");
-    const callArgs = mockCreate.mock.calls[0][0];
-    expect(callArgs.model).toBe("gpt-4o-mini"); // from our mock
+    const callArgs = mockChatCompletion.mock.calls[0][0];
+    expect(callArgs.task).toBe("fast");
   });
 });

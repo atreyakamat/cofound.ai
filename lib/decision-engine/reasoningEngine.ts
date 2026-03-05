@@ -1,4 +1,4 @@
-import { getAIClient, getModel } from "../ai-client";
+import { chatCompletion } from "../ai-client";
 import { assembleChatMessages, type FounderContext } from "../prompts";
 
 export interface ChatMessage {
@@ -28,18 +28,14 @@ export async function getReasoningResponse(
   );
 
   try {
-    const openai = getAIClient();
-    const response = await openai.chat.completions.create({
-      model: getModel("reasoning"),
-      messages: assembled as Parameters<typeof openai.chat.completions.create>[0]["messages"],
+    const raw = await chatCompletion({
+      task: "reasoning",
+      messages: assembled,
       temperature: 0.5,
-      max_tokens: 500,
+      maxTokens: 500,
     });
 
-    return (
-      response.choices[0]?.message?.content ||
-      "I need a moment to process that. Could you elaborate on what you've described?"
-    );
+    return raw || "I need a moment to process that. Could you elaborate on what you've described?";
   } catch (err) {
     throw new Error(`Reasoning engine failed: ${err}`);
   }
